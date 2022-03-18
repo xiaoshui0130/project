@@ -46,7 +46,7 @@
 
 **如何区分 “同步/异步 ”和 “阻塞/非阻塞” 呢？**
 
-同步/异步是从行为角度描述事物的，而阻塞和非阻塞描述的当前事物的状态（等待调用结果时的状态）。
+同步/异步是从行为角度描述事物的，而阻塞和非阻塞描述的==当前事物的状态==（等待调用结果时的状态）。
 
 ## 1. BIO (Blocking I/O)
 
@@ -66,7 +66,7 @@ BIO通信（一请求一应答）模型图如下(图源网络，原出处不明)
 
 **我们再设想一下当客户端并发访问量增加后这种模型会出现什么问题？**
 
-在 Java 虚拟机中，线程是宝贵的资源，线程的创建和销毁成本很高，除此之外，线程的切换成本也是很高的。尤其在 Linux 这样的操作系统中，线程本质上就是一个进程，创建和销毁线程都是重量级的系统函数。如果并发访问量增加会导致线程数急剧膨胀可能会导致线程堆栈溢出、创建新线程失败等问题，最终导致进程宕机或者僵死，不能对外提供服务。
+在 Java 虚拟机中，线程是宝贵的资源，线程的创建和销毁成本很高，除此之外，线程的切换成本也是很高的。尤其在 Linux 这样的操作系统中，线程本质上就是一个进程，==创建和销毁线程都是重量级的系统函数==。如果并发访问量增加会导致线程数急剧膨胀可能会导致==线程堆栈溢出==、==创建新线程失败==等问题，最终导致进程宕机或者僵死，不能对外提供服务。
 
 ### 1.2 伪异步 IO
 
@@ -347,3 +347,261 @@ AIO 是异步IO的缩写，虽然 NIO 在网络操作中，提供了==非阻塞�
 
 - 《Netty 权威指南》第二版
 - https://zhuanlan.zhihu.com/p/23488863 (美团技术团队)
+
+
+
+# 附录
+
+# Java的BIO和NIO很难懂？用代码实践给你看，再不懂我转行！
+
+https://cloud.tencent.com/developer/article/1545422
+
+# 1、引言
+
+这段时间自己在看一些Java中BIO和NIO之类的东西，也看了很多博客，发现各种关于NIO的理论概念说的天花乱坠头头是道，可以说是非常的完整，但是整个看下来之后，发现自己对NIO还是一知半解、一脸蒙逼的状态（请原谅我太笨）。
+
+![img](https://ask.qcloudimg.com/http-save/6708446/zre7stazrc.jpeg?imageView2/2/w/1620)
+
+基于以上原因，就有了写本文的想法。本文不会提到很多Java NIO和Java BIO的理论概念（需要的话请参见本文的“相关文章”一节），而是站在编码实践的角度，通过代码实例，总结了我自己对于Java NIO的见解。有了代码实践的过程后再重新回头看理论概念，会有一个不一样的理解视角，希望能助你吃透它们！
+
+**术语约定：**本文所说的BIO即Java程序员常说的经典阻塞式IO，NIO是指Java 1.4版加入的NIO（即异步IO）。
+
+# 2、关于作者
+
+本文作者：Object
+
+个人博客：[http://blog.objectspace.cn/](https://links.jianshu.com/go?to=http%3A%2F%2Fblog.objectspace.cn%2F)
+
+# 3、相关文章
+
+本文为了避免过多的阐述Java NIO、BIO的概念性内容，因而尽量少的提及相关理论知识，如果你对Java NIO、BIO的理论知识本来就了解不多，建议还是先读一读即时通讯网整理一下文章，将有助于你更好地理解本文。
+
+# 4、先用经典的BIO来实现一个简易的单线程网络通信程序
+
+要讲明白BIO和NIO，首先我们应该自己实现一个简易的服务器，不用太复杂，单线程即可。
+
+#### 4.1 为什么使用单线程作为演示
+
+因为在单线程环境下可以很好地对比出BIO和NIO的一个区别，当然我也会演示在实际环境中BIO的所谓一个请求对应一个线程的状况。
+
+#### 4.2 服务端代码
+
+>  public class Server {         public static void main(String[] args) {                 byte[] buffer = new byte[1024];                 try{                         ServerSocket serverSocket = newServerSocket(8080);                         System.out.println("服务器已启动并监听8080端口");                         while(true) {                                 System.out.println();                                 System.out.println("服务器正在等待连接...");                                 Socket socket = serverSocket.accept();                                 System.out.println("服务器已接收到连接请求...");                                 System.out.println();                                 System.out.println("服务器正在等待数据...");                                 socket.getInputStream().read(buffer);                                 System.out.println("服务器已经接收到数据");                                 System.out.println();                                 String content = newString(buffer);                                 System.out.println("接收到的数据:"+ content);                         }                 } catch(IOException e) {                         // TODO Auto-generated catch block                         e.printStackTrace();                 }         } } 
+
+#### 4.3 客户端代码
+
+>  public class Consumer {         public static void main(String[] args) {                 try{                         Socket socket = newSocket("127.0.0.1",8080);                         socket.getOutputStream().write("向服务器发数据".getBytes());                         socket.close();                 } catch(IOException e) {                         // TODO Auto-generated catch block                         e.printStackTrace();                 }         } } 
+
+#### 4.4 代码解析
+
+我们首先创建了一个服务端类，在类中实现实例化了一个SocketServer并绑定了8080端口。之后调用accept方法来接收连接请求，并且调用read方法来接收客户端发送的数据。最后将接收到的数据打印。
+
+完成了服务端的设计后，我们来实现一个客户端，首先实例化Socket对象，并且绑定ip为127.0.0.1（本机），端口号为8080，调用write方法向服务器发送数据。
+
+![img](https://ask.qcloudimg.com/http-save/6708446/6no5cqkavv.jpeg?imageView2/2/w/1620)
+
+#### 4.5 运行结果
+
+当我们启动服务器，但客户端还没有向服务器发起连接时，控制台结果如下：
+
+![img](https://ask.qcloudimg.com/http-save/6708446/u907kuy3z6.png?imageView2/2/w/1620)
+
+当客户端启动并向服务器发送数据后，控制台结果如下：
+
+![img](https://ask.qcloudimg.com/http-save/6708446/uixx8yr2tn.png?imageView2/2/w/1620)
+
+#### 4.6 结论
+
+从上面的运行结果，首先我们至少可以看到，在服务器启动后，客户端还没有连接服务器时，服务器由于调用了accept方法，将一直阻塞，直到有客户端请求连接服务器。
+
+# 5、对客户端功能进行扩展
+
+在上节中，我们实现的客户端的逻辑主要是：建立Socket –> 连接服务器 –> 发送数据，我们的数据是在连接服务器之后就立即发送的，现在我们来对客户端进行一次扩展，当我们连接服务器后，不立即发送数据，而是等待控制台手动输入数据后，再发送给服务端。（注意：本节中，服务端代码保持不变）
+
+#### 5.1 改进后的代码
+
+>  public class Consumer {         public static void main(String[] args) {                 try{                         Socket socket = newSocket("127.0.0.1",8080);                         String message = null;                         Scanner sc = newScanner(System.in);                         message = sc.next();                         socket.getOutputStream().write(message.getBytes());                         socket.close();                         sc.close();                 } catch(IOException e) {                         // TODO Auto-generated catch block                         e.printStackTrace();                 }         } } 
+
+#### 5.2 测试
+
+当服务端启动，客户端还没有请求连接服务器时，控制台结果如下：
+
+![img](https://ask.qcloudimg.com/http-save/6708446/es0bymnf7o.png?imageView2/2/w/1620)
+
+当服务端启动，客户端连接服务端，但没有发送数据时，控制台结果如下：
+
+![img](https://ask.qcloudimg.com/http-save/6708446/ihj9veq2ly.png?imageView2/2/w/1620)
+
+当服务端启动，客户端连接服务端，并且发送数据时，控制台结果如下：
+
+![img](https://ask.qcloudimg.com/http-save/6708446/n5pat77kxb.png?imageView2/2/w/1620)
+
+#### 5.3 结论
+
+**从上面的运行结果中我们可以看到，服务器端在启动后：**
+
+>  1）首先需要等待客户端的连接请求（第一次阻塞）； 2）如果没有客户端连接，服务端将一直阻塞等待； 3）然后当客户端连接后，服务器会等待客户端发送数据（第二次阻塞）； 4）如果客户端没有发送数据，那么服务端将会一直阻塞等待客户端发送数据。 
+
+**服务端从启动到收到客户端数据的这个过程，将会有两次阻塞的过程：**
+
+>  1）第一次在等待连接时阻塞； 2）第二次在等待数据时阻塞。 
+
+BIO会产生两次阻塞，这就是BIO的非常重要的一个特点。
+
+# 6、BIO
+
+#### 6.1 在单线程条件下BIO的弱点
+
+在上两节中，我们用经典的Java BIO实现了一个简易的网络通信程序，这个简易的程序是以单线程运行的。
+
+**其实我们不难看出：**当我们的服务器接收到一个连接后，并且没有接收到客户端发送的数据时，是会阻塞在read()方法中的，那么此时如果再来一个客户端的请求，服务端是无法进行响应的。**换言之：**在不考虑多线程的情况下，BIO是无法处理多个客户端请求的。
+
+#### 6.2 BIO如何处理并发
+
+在上面的服务器实现中，我们实现的是单线程版的BIO服务器，不难看出，单线程版的BIO并不能处理多个客户端的请求，那么如何能使BIO处理多个客户端请求呢。
+
+**其实不难想到：**我们只需要在每一个连接请求到来时，创建一个线程去执行这个连接请求，就可以在BIO中处理多个客户端请求了，这也就是为什么BIO的其中一条概念是服务器实现模式为一个连接一个线程，即客户端有连接请求时服务器端就需要启动一个线程进行处理。
+
+#### 6.3 多线程BIO服务器简易实现
+
+>  public class Server {         public static void main(String[] args) {                 byte[] buffer = newbyte[1024];                 try{                         ServerSocket serverSocket = newServerSocket(8080);                         System.out.println("服务器已启动并监听8080端口");                         while(true) {                                 System.out.println();                                 System.out.println("服务器正在等待连接...");                                 Socket socket = serverSocket.accept();                                 newThread(newRunnable() {                                         @Override                                         publicvoidrun() {                                                 System.out.println("服务器已接收到连接请求...");                                                 System.out.println();                                                 System.out.println("服务器正在等待数据...");                                                 try{                                                         socket.getInputStream().read(buffer);                                                 } catch(IOException e) {                                                         // TODO Auto-generated catch block                                                         e.printStackTrace();                                                 }                                                 System.out.println("服务器已经接收到数据");                                                 System.out.println();                                                 String content = newString(buffer);                                                 System.out.println("接收到的数据:"+ content);                                         }                                 }).start();                           }                 } catch(IOException e) {                         // TODO Auto-generated catch block                         e.printStackTrace();                 }         } } 
+
+#### 6.4 运行结果
+
+![img](https://ask.qcloudimg.com/http-save/6708446/a6zx8hnl5k.png?imageView2/2/w/1620)
+
+![img](https://ask.qcloudimg.com/http-save/6708446/cuemb8mryu.png?imageView2/2/w/1620)
+
+很明显，现在我们的服务器的状态就是一个线程对应一个请求，换言之，服务器为每一个连接请求都创建了一个线程来处理。
+
+#### 6.5 多线程BIO服务器的弊端
+
+**多线程BIO服务器虽然解决了单线程BIO无法处理并发的弱点，但是也带来一个问题：**如果有大量的请求连接到我们的服务器上，但是却不发送消息，那么我们的服务器也会为这些不发送消息的请求创建一个单独的线程，那么如果连接数少还好，连接数一多就会对服务端造成极大的压力。
+
+**所以：**如果这种不活跃的线程比较多，我们应该采取单线程的一个解决方案，但是单线程又无法处理并发，这就陷入了一种很矛盾的状态，于是就有了NIO。
+
+# 7、NIO
+
+#### 7.1 NIO的引入
+
+我们先来看看单线程模式下BIO服务器的代码，其实NIO需要解决的最根本的问题就是存在于BIO中的两个阻塞，分别是等待连接时的阻塞和等待数据时的阻塞。
+
+>  public class Server {         public static void main(String[] args) {                 byte[] buffer = new byte[1024];                 try{                         ServerSocket serverSocket = newServerSocket(8080);                         System.out.println("服务器已启动并监听8080端口");                         while(true) {                                 System.out.println();                                 System.out.println("服务器正在等待连接...");                                 //阻塞1：等待连接时阻塞                                 Socket socket = serverSocket.accept();                                 System.out.println("服务器已接收到连接请求...");                                 System.out.println();                                 System.out.println("服务器正在等待数据...");                                 //阻塞2：等待数据时阻塞                                 socket.getInputStream().read(buffer);                                 System.out.println("服务器已经接收到数据");                                 System.out.println();                                 String content = new String(buffer);                                 System.out.println("接收到的数据:"+ content);                         }                 } catch(IOException e) {                         // TODO Auto-generated catch block                         e.printStackTrace();                 }         } } 
+
+我们需要再老调重谈的一点是，如果单线程服务器在等待数据时阻塞，那么第二个连接请求到来时，服务器是无法响应的。如果是多线程服务器，那么又会有为大量空闲请求产生新线程从而造成线程占用系统资源，线程浪费的情况。
+
+那么我们的问题就转移到，如何让单线程服务器在等待客户端数据到来时，依旧可以接收新的客户端连接请求。
+
+#### 7.2 模拟NIO解决方案
+
+如果要解决上文中提到的单线程服务器接收数据时阻塞，而无法接收新请求的问题，那么其实可以让服务器在等待数据时不进入阻塞状态，问题不就迎刃而解了吗？
+
+***【第一种解决方案（等待连接时和等待数据时不阻塞）】：\***
+
+>  public class Server {         public static void main(String[] args) throws InterruptedException {                 ByteBuffer byteBuffer = ByteBuffer.allocate(1024);                 try{                         //Java为非阻塞设置的类                         ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();                         serverSocketChannel.bind(newInetSocketAddress(8080));                         //设置为非阻塞                         serverSocketChannel.configureBlocking(false);                         while(true) {                                 SocketChannel socketChannel = serverSocketChannel.accept();                                 if(socketChannel==null) {                                         //表示没人连接                                         System.out.println("正在等待客户端请求连接...");                                         Thread.sleep(5000);                                 }else{                                         System.out.println("当前接收到客户端请求连接...");                                 }                                 if(socketChannel!=null) {                     //设置为非阻塞                                         socketChannel.configureBlocking(false);                                         byteBuffer.flip();//切换模式  写-->读                                         int effective = socketChannel.read(byteBuffer);                                         if(effective!=0) {                                                 String content = Charset.forName("utf-8").decode(byteBuffer).toString();                                                 System.out.println(content);                                         }else{                                                 System.out.println("当前未收到客户端消息");                                         }                                 }                         }                 } catch(IOException e) {                         // TODO Auto-generated catch block                         e.printStackTrace();                 }         } } 
+
+**运行结果：**
+
+![img](https://ask.qcloudimg.com/http-save/6708446/16lubjnni1.png?imageView2/2/w/1620)
+
+**代码解析：**
+
+不难看出，在这种解决方案下，虽然在接收客户端消息时不会阻塞，但是又开始重新接收服务器请求，用户根本来不及输入消息，服务器就转向接收别的客户端请求了，换言之，服务器弄丢了当前客户端的请求。
+
+***【解决方案二（缓存Socket，轮询数据是否准备好）】：\***
+
+>  public class Server {         public static void main(String[] args) throws InterruptedException {                 ByteBuffer byteBuffer = ByteBuffer.allocate(1024);                   List<SocketChannel> socketList = newArrayList<SocketChannel>();                 try{                         //Java为非阻塞设置的类                         ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();                         serverSocketChannel.bind(newInetSocketAddress(8080));                         //设置为非阻塞                         serverSocketChannel.configureBlocking(false);                         while(true) {                                 SocketChannel socketChannel = serverSocketChannel.accept();                                 if(socketChannel==null) {                                         //表示没人连接                                         System.out.println("正在等待客户端请求连接...");                                         Thread.sleep(5000);                                 }else{                                         System.out.println("当前接收到客户端请求连接...");                                         socketList.add(socketChannel);                                 }                                 for(SocketChannel socket:socketList) {                                         socket.configureBlocking(false);                                         int effective = socket.read(byteBuffer);                                         if(effective!=0) {                                                 byteBuffer.flip();//切换模式  写-->读                                                 String content = Charset.forName("UTF-8").decode(byteBuffer).toString();                                                 System.out.println("接收到消息:"+content);                                                 byteBuffer.clear();                                         }else{                                                 System.out.println("当前未收到客户端消息");                                         }                                 }                         }                 } catch(IOException e) {                         // TODO Auto-generated catch block                         e.printStackTrace();                 }         } } 
+
+**运行结果：**
+
+![img](https://ask.qcloudimg.com/http-save/6708446/34k2xo5qkz.png?imageView2/2/w/1620)
+
+![img](https://ask.qcloudimg.com/http-save/6708446/ojjikot0q1.png?imageView2/2/w/1620)
+
+**代码解析：**
+
+在解决方案一中，我们采用了非阻塞方式，但是发现一旦非阻塞，等待客户端发送消息时就不会再阻塞了，而是直接重新去获取新客户端的连接请求，这就会造成客户端连接丢失。
+
+而在解决方案二中，我们将连接存储在一个list集合中，每次等待客户端消息时都去轮询，看看消息是否准备好，如果准备好则直接打印消息。
+
+可以看到，从头到尾我们一直没有开启第二个线程，而是一直采用单线程来处理多个客户端的连接，这样的一个模式可以很完美地解决BIO在单线程模式下无法处理多客户端请求的问题，并且解决了非阻塞状态下连接丢失的问题。
+
+#### 7.3 存在的问题（解决方案二）
+
+从刚才的运行结果中其实可以看出，消息没有丢失，程序也没有阻塞。
+
+但是，在接收消息的方式上可能有些许不妥，我们采用了一个轮询的方式来接收消息，每次都轮询所有的连接，看消息是否准备好，测试用例中只是三个连接，所以看不出什么问题来，但是我们假设有1000万连接，甚至更多，采用这种轮询的方式效率是极低的。
+
+另外，1000万连接中，我们可能只会有100万会有消息，剩下的900万并不会发送任何消息，那么这些连接程序依旧要每次都去轮询，这显然是不合适的。
+
+#### 7.4 真实NIO中如何解决
+
+在真实NIO中，并不会在Java层上来进行一个轮询，而是将轮询的这个步骤交给我们的操作系统来进行，他将轮询的那部分代码改为操作系统级别的系统调用（select函数，在linux环境中为epoll），在操作系统级别上调用select函数，主动地去感知有数据的socket。
+
+# 8、关于使用select/epoll和直接在应用层做轮询的区别
+
+我们在之前实现了一个使用Java做多个客户端连接轮询的逻辑，但是在真正的NIO源码中其实并不是这么实现的，NIO使用了操作系统底层的轮询系统调用 select/epoll(windows:select,linux:epoll)，那么为什么不直接实现而要去调用系统来做轮询呢？
+
+#### 8.1 select底层逻辑
+
+![img](https://ask.qcloudimg.com/http-save/6708446/zqzqo22fue.jpeg?imageView2/2/w/1620)
+
+假设有A、B、C、D、E五个连接同时连接服务器，那么根据我们上文中的设计，程序将会遍历这五个连接，轮询每个连接，获取各自数据准备情况，那么和我们自己写的程序有什么区别呢？
+
+**首先：**我们写的Java程序其本质在轮询每个Socket的时候也需要去调用系统函数，那么轮询一次调用一次，会造成不必要的上下文切换开销。
+
+**而：**Select会将五个请求从用户态空间全量复制一份到内核态空间，在内核态空间来判断每个请求是否准备好数据，完全避免频繁的上下文切换。所以效率是比我们直接在应用层写轮询要高的。
+
+**如果：**select没有查询到到有数据的请求，那么将会一直阻塞（是的，select是一个阻塞函数）。如果有一个或者多个请求已经准备好数据了，那么select将会先将有数据的文件描述符置位，然后select返回。返回后通过遍历查看哪个请求有数据。
+
+**select的缺点：**
+
+>  1）底层存储依赖bitmap，处理的请求是有上限的，为1024； 2）文件描述符是会置位的，所以如果当被置位的文件描述符需要重新使用时，是需要重新赋空值的； 3）fd（文件描述符）从用户态拷贝到内核态仍然有一笔开销； 4）select返回后还要再次遍历，来获知是哪一个请求有数据。 
+
+#### 8.2 poll函数底层逻辑
+
+poll的工作原理和select很像，先来看一段poll内部使用的一个结构体。
+
+>  struct pollfd{     int fd;     short events;     short revents; } 
+
+poll同样会将所有的请求拷贝到内核态，和select一样，poll同样是一个阻塞函数，当一个或多个请求有数据的时候，也同样会进行置位，但是它置位的是结构体pollfd中的events或者revents置位，而不是对fd本身进行置位，所以在下一次使用的时候不需要再进行重新赋空值的操作。poll内部存储不依赖bitmap，而是使用pollfd数组的这样一个数据结构，数组的大小肯定是大于1024的。解决了select 1、2两点的缺点。
+
+#### 8.3 epoll函数底层逻辑
+
+epoll是最新的一种多路IO复用的函数。这里只说说它的特点。
+
+epoll和上述两个函数最大的不同是，它的fd是共享在用户态和内核态之间的，所以可以不必进行从用户态到内核态的一个拷贝，这样可以节约系统资源。
+
+另外，在select和poll中，如果某个请求的数据已经准备好，它们会将所有的请求都返回，供程序去遍历查看哪个请求存在数据，但是epoll只会返回存在数据的请求，这是因为epoll在发现某个请求存在数据时，首先会进行一个重排操作，将所有有数据的fd放到最前面的位置，然后返回（返回值为存在数据请求的个数N），那么我们的上层程序就可以不必将所有请求都轮询，而是直接遍历epoll返回的前N个请求，这些请求都是有数据的请求。
+
+
+
+# 9、Java中BIO和NIO的概念总结
+
+通常一些文章都是在开头放上概念，但是我这次选择将概念放在结尾，因为通过上面的实操，相信大家对Java中BIO和NIO都有了自己的一些理解，这时候再来看[概念](https://links.jianshu.com/go?to=https%3A%2F%2Fblog.csdn.net%2Fguanghuichenshao%2Farticle%2Fdetails%2F79375967)应该会更好理解一些了。
+
+**先来个例子理解一下概念，以银行取款为例：**
+
+1）同步 ： 自己亲自出马持银行卡到银行取钱（使用同步IO时，Java自己处理IO读写）；
+
+3）异步 ： 委托一小弟拿银行卡到银行取钱，然后给你（使用异步IO时，Java将IO读写委托给OS处理，需要将数据缓冲区地址和大小传给OS(银行卡和密码)，OS需要支持异步IO操作API）；
+
+3）阻塞 ： ATM排队取款，你只能等待（使用阻塞IO时，Java调用会一直阻塞到读写完成才返回）；
+
+4）非阻塞 ： 柜台取款，取个号，然后坐在椅子上做其它事，等号广播会通知你办理，没到号你就不能去，你可以不断问大堂经理排到了没有，大堂经理如果说还没到你就不能去（使用非阻塞IO时，如果不能读写Java调用会马上返回，当IO事件分发器会通知可读写时再继续进行读写，不断循环直到读写完成）。
+
+**Java对BIO、NIO的支持：**
+
+1）Java BIO (blocking I/O)：同步并阻塞，服务器实现模式为一个连接一个线程，即客户端有连接请求时服务器端就需要启动一个线程进行处理，如果这个连接不做任何事情会造成不必要的线程开销，当然可以通过线程池机制改善；
+
+2）Java NIO (non-blocking I/O)： 同步非阻塞，服务器实现模式为一个请求一个线程，即客户端发送的连接请求都会注册到多路复用器上，多路复用器轮询到连接有I/O请求时才启动一个线程进行处理。
+
+**BIO、NIO适用场景分析:**
+
+1）BIO方式： 适用于连接数目比较小且固定的架构，这种方式对服务器资源要求比较高，并发局限于应用中，JDK1.4以前的唯一选择，但程序直观简单易理解；
+
+2）NIO方式： 适用于连接数目多且连接比较短（轻操作）的架构，比如聊天服务器，并发局限于应用中，编程比较复杂，JDK1.4开始支持。
+
+# 10、本文小结
+
+本文介绍了一些关于JavaBIO和NIO从自己实操的角度上的一些理解，我个人认为这样去理解BIO和NIO会比光看概念会有更深的理解，也希望各位同学可以自己去敲一遍，通过程序的运行结果得出自己对JavaBIO和NIO的理解。
