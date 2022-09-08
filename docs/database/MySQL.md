@@ -74,7 +74,7 @@ MySQL 5.5 之前，MyISAM 引擎是 MySQL 的默认存储引擎，可谓是风�
 
 MyISAM ==不提供事务支持==。
 
-InnoDB =提供事务支持==，具有提交(commit)和回滚(rollback)事务的能力。
+InnoDB ==提供事务支持==，具有提交(commit)和回滚(rollback)事务的能力。
 
 **3.是否支持==外键==**
 
